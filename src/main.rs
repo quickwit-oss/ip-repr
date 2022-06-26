@@ -2,8 +2,8 @@ use ip_repr::{IntervalEncoding, IpRepr};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
+    io::{self, BufRead},
     net::{IpAddr, Ipv6Addr},
-    path::{Path, PathBuf},
     str::FromStr,
 };
 use structopt::StructOpt;
@@ -11,18 +11,18 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 struct Opt {
     #[structopt(short, long)]
-    filepath: PathBuf,
-
-    #[structopt(short, long)]
     print_stats: bool,
 }
 
-fn ip_dataset(filepath: &Path) -> Vec<u128> {
+fn ip_dataset() -> Vec<u128> {
     let mut ip_addr_v4 = 0;
-    let data = std::fs::read_to_string(filepath).unwrap();
-    let ip_addrs: Vec<u128> = data
+
+    let stdin = io::stdin();
+    let ip_addrs: Vec<u128> = stdin
+        .lock()
         .lines()
         .flat_map(|line| {
+            let line = line.unwrap();
             let line = line.trim();
             let ip_addr = IpAddr::from_str(line.trim()).ok()?;
             if ip_addr.is_ipv4() {
@@ -35,7 +35,6 @@ fn ip_dataset(filepath: &Path) -> Vec<u128> {
             Some(ip_addr_v6)
         })
         .map(|ip_v6| u128::from_be_bytes(ip_v6.octets()))
-        .take(1_000_000)
         .collect();
     println!("IpAddrsAny\t{}", ip_addrs.len());
     println!("IpAddrsV4\t{}", ip_addr_v4);
@@ -84,7 +83,7 @@ fn print_set_stats(ip_addrs: &[u128]) {
 
 fn main() {
     let args = Opt::from_args();
-    let ip_addrs = ip_dataset(&args.filepath);
+    let ip_addrs = ip_dataset();
     if args.print_stats {
         print_set_stats(&ip_addrs);
     }
