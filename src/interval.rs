@@ -15,7 +15,7 @@ struct Compressor {
 
 const STOP_BIT: u8 = 128u8;
 
- fn serialize_vint(mut val: u128, output: &mut Vec<u8>)  {
+fn serialize_vint(mut val: u128, output: &mut Vec<u8>) {
     loop {
         let next_byte: u8 = (val % 128u128) as u8;
         val /= 128u128;
@@ -35,26 +35,30 @@ fn deserialize_vint(data: &[u8]) -> (u128, &[u8]) {
         let b = data[i];
         result |= u128::from(b % 128u8) << shift;
         if b >= STOP_BIT {
-            return (result, &data[i+1..])
+            return (result, &data[i + 1..]);
         }
         shift += 7;
     }
     panic!("invalid data");
 }
 
-fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
+fn get_deltas(ip_addrs_sorted: &[u128]) -> BinaryHeap<(u128, usize)> {
     let mut prev_opt = None;
     let mut deltas: BinaryHeap<(u128, usize)> = BinaryHeap::new();
     for (pos, ip_addr) in ip_addrs_sorted.iter().cloned().enumerate() {
-        let delta =
-             if let Some(prev) = prev_opt {
-                ip_addr - prev
-             } else {
-                ip_addr + 1
-             };
+        let delta = if let Some(prev) = prev_opt {
+            ip_addr - prev
+        } else {
+            ip_addr + 1
+        };
         deltas.push((delta, pos));
         prev_opt = Some(ip_addr);
     }
+    deltas
+}
+
+fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
+    let mut deltas = get_deltas(ip_addrs_sorted);
     let mut amplitude = *ip_addrs_sorted.last().unwrap() + 1;
     let mut amplitude_bits: f64 = (amplitude as f64).log2();
     let mut blanks = Vec::new();
@@ -94,15 +98,18 @@ fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
         ip_addr_to_compact,
         num_bits,
     };
-    assert_eq!(compressor.to_compact(*ip_addrs_sorted.last().unwrap()) + 1, amplitude as u64);
+    assert_eq!(
+        compressor.to_compact(*ip_addrs_sorted.last().unwrap()) + 1,
+        amplitude as u64
+    );
     compressor
 }
 
 impl Compressor {
-
-
     fn to_compact(&self, ip_addr: u128) -> u64 {
-        if let Some((&ip_addr_base, &compact_base)) = self.ip_addr_to_compact.range(..=ip_addr).last() {
+        if let Some((&ip_addr_base, &compact_base)) =
+            self.ip_addr_to_compact.range(..=ip_addr).last()
+        {
             compact_base + (ip_addr - ip_addr_base) as u64
         } else {
             ip_addr as u64
@@ -145,10 +152,9 @@ impl Compressor {
     }
 }
 
-
 struct Decompressor {
     compact_to_ip_addrs: BTreeMap<u64, u128>,
-    bit_unpacker: BitUnpacker
+    bit_unpacker: BitUnpacker,
 }
 
 impl Decompressor {
@@ -171,7 +177,7 @@ impl Decompressor {
         data = &data[1..];
         let decompressor = Decompressor {
             compact_to_ip_addrs,
-            bit_unpacker: BitUnpacker::new(num_bits)
+            bit_unpacker: BitUnpacker::new(num_bits),
         };
         (decompressor, data)
     }
@@ -231,7 +237,17 @@ mod tests {
 
     #[test]
     fn test_compress() {
-        let ip_addrs = &[1u128, 100u128, 3u128, 99999u128, 100000u128, 100001u128, 4_000_211_221u128, 4_000_211_222u128, 333u128];
+        let ip_addrs = &[
+            1u128,
+            100u128,
+            3u128,
+            99999u128,
+            100000u128,
+            100001u128,
+            4_000_211_221u128,
+            4_000_211_222u128,
+            333u128,
+        ];
         let interval_encoding = IntervalEncoding::default();
         test_aux_vals(&interval_encoding, ip_addrs)
     }

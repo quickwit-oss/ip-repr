@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 tantivy-bitpacker = "0.2"
 structopt = "0.3"
+itertools = "0.10.3"
 
 [lib]
 name = "ip_repr"
