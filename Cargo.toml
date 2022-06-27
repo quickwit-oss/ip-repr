@@ -9,6 +9,8 @@ edition = "2021"
 tantivy-bitpacker = "0.2"
 structopt = "0.3"
 itertools = "0.10.3"
+fnv = "1.0.7"
+q_compress = "0.10.0"
 
 [lib]
 name = "ip_repr"

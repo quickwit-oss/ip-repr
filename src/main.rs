@@ -1,8 +1,8 @@
-use ip_repr::{IntervalEncoding, IpRepr};
+use ip_repr::{HalfDict, HalfDictQ, IntervalEncoding, IpRepr};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
-    io::{self, BufRead},
+    io::{self, BufRead, Write},
     net::{IpAddr, Ipv6Addr},
     str::FromStr,
 };
@@ -12,6 +12,27 @@ use structopt::StructOpt;
 struct Opt {
     #[structopt(short, long)]
     print_stats: bool,
+
+    #[structopt(short, long)]
+    compressor: Compressor,
+}
+
+#[derive(Debug)]
+enum Compressor {
+    Interval,
+    HalfDict,
+    HalfDictQuantil,
+}
+impl FromStr for Compressor {
+    type Err = String;
+    fn from_str(day: &str) -> Result<Self, Self::Err> {
+        match day {
+            "interval" => Ok(Compressor::Interval),
+            "halfdict" => Ok(Compressor::HalfDict),
+            "halfdict_quantil" => Ok(Compressor::HalfDictQuantil),
+            _ => Err("Could not parse a day".to_string()),
+        }
+    }
 }
 
 fn ip_dataset() -> Vec<u128> {
@@ -84,27 +105,49 @@ fn print_set_stats(ip_addrs: &[u128]) {
 fn main() {
     let args = Opt::from_args();
     let ip_addrs = ip_dataset();
+
+    let bytes = ip_addrs.iter().fold(vec![], |mut acc, el| {
+        acc.extend_from_slice(&el.to_le_bytes());
+        acc
+    });
+
+    let mut f = std::fs::File::create("ips_binary").unwrap();
+    f.write_all(&bytes).unwrap();
+
     if args.print_stats {
         print_set_stats(&ip_addrs);
     }
 
-    let encoders: Vec<Box<dyn IpRepr>> = (0..16)
-        .map(|num_bytes_per_intervals| {
-            Box::new(IntervalEncoding(8 * num_bytes_per_intervals)) as Box<dyn IpRepr>
-        })
-        .collect();
+    match args.compressor {
+        Compressor::Interval => {
+            let encoders: Vec<Box<dyn IpRepr>> = (0..16)
+                .map(|num_bytes_per_intervals| {
+                    Box::new(IntervalEncoding(8 * num_bytes_per_intervals)) as Box<dyn IpRepr>
+                })
+                .collect();
 
-    for encoder in encoders {
-        println!("\n\n-----");
-        println!("{:?}", encoder);
-        let encoded = encoder.encode(&ip_addrs);
-        let decoded = encoder.decode(&encoded);
-        assert_eq!(&decoded, &ip_addrs);
-        let num_bytes = encoded.len();
-        println!("num_bytes\t{num_bytes:.2}");
-        let bits_per_el = (8 * num_bytes) as f64 / ip_addrs.len() as f64;
-        println!("bits_per_el\t{:.2}", bits_per_el);
+            for encoder in encoders {
+                println!("\n\n-----");
+                println!("{:?}", encoder);
+                let encoded = encoder.encode(&ip_addrs);
+                let decoded = encoder.decode(&encoded);
+                assert_eq!(&decoded, &ip_addrs);
+                let num_bytes = encoded.len();
+                println!("num_bytes\t{num_bytes:.2}");
+                let bits_per_el = (8 * num_bytes) as f64 / ip_addrs.len() as f64;
+                println!("bits_per_el\t{:.2}", bits_per_el);
+            }
+        }
+        Compressor::HalfDict => {
+            let half_dict = HalfDict::new(1024, 8);
+            half_dict.encode(&ip_addrs);
+        }
+        Compressor::HalfDictQuantil => {
+            let half_dict = HalfDictQ::new();
+            half_dict.encode(&ip_addrs);
+        }
     }
+
     // let encoding = IntervalEncoding;
     // let compress = ip_repr::IntervalEncoding.encode(ip_addrs)
 }
