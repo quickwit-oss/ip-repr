@@ -2,9 +2,10 @@ use ip_repr::{HalfDict, HalfDictQ, IntervalEncoding, IpRepr};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
-    io::{self, BufRead, Write},
+    io::{self, BufRead},
     net::{IpAddr, Ipv6Addr},
     str::FromStr,
+    time::Instant,
 };
 use structopt::StructOpt;
 
@@ -19,6 +20,7 @@ struct Opt {
 
 #[derive(Debug)]
 enum Compressor {
+    Zstd,
     Interval,
     HalfDict,
     HalfDictQuantil,
@@ -27,6 +29,7 @@ impl FromStr for Compressor {
     type Err = String;
     fn from_str(day: &str) -> Result<Self, Self::Err> {
         match day {
+            "zstd" => Ok(Compressor::Zstd),
             "interval" => Ok(Compressor::Interval),
             "halfdict" => Ok(Compressor::HalfDict),
             "halfdict_quantil" => Ok(Compressor::HalfDictQuantil),
@@ -106,14 +109,6 @@ fn main() {
     let args = Opt::from_args();
     let ip_addrs = ip_dataset();
 
-    let bytes = ip_addrs.iter().fold(vec![], |mut acc, el| {
-        acc.extend_from_slice(&el.to_le_bytes());
-        acc
-    });
-
-    let mut f = std::fs::File::create("ips_binary").unwrap();
-    f.write_all(&bytes).unwrap();
-
     if args.print_stats {
         print_set_stats(&ip_addrs);
     }
@@ -145,6 +140,18 @@ fn main() {
         Compressor::HalfDictQuantil => {
             let half_dict = HalfDictQ::new();
             half_dict.encode(&ip_addrs);
+        }
+        Compressor::Zstd => {
+            let bytes: Vec<u8> = ip_addrs.iter().fold(vec![], |mut acc, el| {
+                acc.extend_from_slice(&el.to_le_bytes());
+                acc
+            });
+
+            let start = Instant::now();
+            let mut out = vec![];
+            zstd::stream::copy_encode(&*bytes, &mut out, 3).unwrap();
+            println!("Compress Time: {}ms", (Instant::now() - start).as_millis());
+            println!("Out len: {}", out.len());
         }
     }
 
