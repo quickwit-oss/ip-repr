@@ -131,12 +131,7 @@ impl HalfDictCompressor {
             });
             //let mut dict_entries = vec![];
         }
-        // handle chunks remainder
-
-        //for block in &block_metadata {
-        //println!("Block Num bits per elem {}", block.num_bits_per_elem());
-        //println!("top256 {}", block.num_top_256);
-        //}
+        // TODO handle chunks remainder
 
         let num_compressed_bytes: usize = block_metadata
             .iter()
@@ -199,13 +194,5 @@ impl IpRepr for HalfDict {
 
     fn decode(&self, _data: &[u8]) -> Vec<u128> {
         unimplemented!()
-        //let (decompressor, data) = Decompressor::open(data);
-        //let (num_vals, data) = deserialize_vint(data);
-        //let mut ip_addrs = Vec::new();
-        //for idx in 0..num_vals as usize {
-        //let ip_addr = decompressor.get(idx, data);
-        //ip_addrs.push(ip_addr);
-        //}
-        //ip_addrs
     }
 }
