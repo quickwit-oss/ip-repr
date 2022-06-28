@@ -5,17 +5,18 @@ use fnv::FnvHashMap;
 use crate::{get_most_common, IPWithCount, IpRepr};
 
 #[derive(Debug)]
-pub struct HalfDictQ {}
+pub struct HalfDictQ {
+    num_most_common: usize,
+}
 
 impl HalfDictQ {
-    pub fn new() -> HalfDictQ {
-        HalfDictQ {}
+    pub fn new(num_most_common: usize) -> HalfDictQ {
+        HalfDictQ { num_most_common }
     }
 }
 
 struct HalfDictCompressorQ {
     top_ips_ordered: Vec<IPWithCount>,
-    //ip_to_ordinal: FnvHashMap<u128, u128>,
     remapped_ip_addr: Vec<u128>,
 }
 
@@ -24,7 +25,16 @@ impl HalfDictCompressorQ {
         let bytes: Vec<u8> = q_compress::auto_compress(&self.remapped_ip_addr, 10);
 
         let storing_dict = self.top_ips_ordered.len() * 16;
-        println!("bytes len: {}", bytes.len() + storing_dict);
+        let num_compressed_bytes = bytes.len() + storing_dict;
+        println!(
+            "HalfDictQ: TopNRemapped:{} - compressed len: {}",
+            self.top_ips_ordered.len(),
+            num_compressed_bytes
+        );
+        println!(
+            "Compression: {:.2}%",
+            100.0 * num_compressed_bytes as f64 / (_ip_addrs.len() as f64 * 16.0)
+        );
 
         bytes
     }
@@ -32,7 +42,7 @@ impl HalfDictCompressorQ {
 
 impl HalfDictQ {
     fn train(&self, ip_addrs: &[u128]) -> HalfDictCompressorQ {
-        let num_most_common = 4096;
+        let num_most_common = self.num_most_common;
         let top_ips_ordered = get_most_common(ip_addrs, num_most_common);
         let ip_to_ordinal: FnvHashMap<u128, u128> = top_ips_ordered
             .iter()
@@ -52,7 +62,6 @@ impl HalfDictQ {
 
         HalfDictCompressorQ {
             top_ips_ordered,
-            //ip_to_ordinal,
             remapped_ip_addr,
         }
     }

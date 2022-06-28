@@ -38,7 +38,7 @@ impl FromStr for Compressor {
     }
 }
 
-fn ip_dataset() -> Vec<u128> {
+fn ip_dataset(print_stats: bool) -> Vec<u128> {
     let mut ip_addr_v4 = 0;
 
     let stdin = io::stdin();
@@ -60,8 +60,11 @@ fn ip_dataset() -> Vec<u128> {
         })
         .map(|ip_v6| u128::from_be_bytes(ip_v6.octets()))
         .collect();
-    println!("IpAddrsAny\t{}", ip_addrs.len());
-    println!("IpAddrsV4\t{}", ip_addr_v4);
+
+    if print_stats {
+        println!("IpAddrsAny\t{}", ip_addrs.len());
+        println!("IpAddrsV4\t{}", ip_addr_v4);
+    }
     ip_addrs
 }
 
@@ -107,7 +110,7 @@ fn print_set_stats(ip_addrs: &[u128]) {
 
 fn main() {
     let args = Opt::from_args();
-    let ip_addrs = ip_dataset();
+    let ip_addrs = ip_dataset(args.print_stats);
 
     if args.print_stats {
         print_set_stats(&ip_addrs);
@@ -138,7 +141,16 @@ fn main() {
             half_dict.encode(&ip_addrs);
         }
         Compressor::HalfDictQuantil => {
-            let half_dict = HalfDictQ::new();
+            let half_dict = HalfDictQ::new(4096 * 2);
+            half_dict.encode(&ip_addrs);
+
+            let half_dict = HalfDictQ::new(4096);
+            half_dict.encode(&ip_addrs);
+
+            let half_dict = HalfDictQ::new(4096 / 2);
+            half_dict.encode(&ip_addrs);
+
+            let half_dict = HalfDictQ::new(4096 / 4);
             half_dict.encode(&ip_addrs);
         }
         Compressor::Zstd => {
@@ -151,7 +163,11 @@ fn main() {
             let mut out = vec![];
             zstd::stream::copy_encode(&*bytes, &mut out, 3).unwrap();
             println!("Compress Time: {}ms", (Instant::now() - start).as_millis());
-            println!("Out len: {}", out.len());
+            println!("Compressed len: {}", out.len());
+            println!(
+                "Compression: {:.2}%",
+                100.0 * out.len() as f64 / (ip_addrs.len() as f64 * 16.0)
+            );
         }
     }
 

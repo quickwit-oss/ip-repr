@@ -138,13 +138,21 @@ impl HalfDictCompressor {
         //println!("top256 {}", block.num_top_256);
         //}
 
-        let sum: usize = block_metadata
+        let num_compressed_bytes: usize = block_metadata
             .iter()
             .map(|block| block.get_num_bits())
             .sum::<usize>()
             / 8;
 
-        println!("Total num bytes {}, block_size {}", sum, self.block_size);
+        println!(
+            "HalfDict + Compressed Space: compressed len: {}",
+            num_compressed_bytes
+        );
+
+        println!(
+            "Compression: {:.2}%",
+            100.0 * num_compressed_bytes as f64 / (ip_addrs.len() as f64 * 16.0)
+        );
 
         vec![]
     }
