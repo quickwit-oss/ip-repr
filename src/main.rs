@@ -10,8 +10,6 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
-    #[structopt(short, long)]
-    print_stats: bool,
 }
 
 fn ip_dataset() -> Vec<u128> {
@@ -76,18 +74,17 @@ fn print_set_stats(ip_addrs: &[u128]) {
             b.1.cmp(&a.1)
         }
     });
+    println!("\n\n----\nIP Address histogram");
+    println!("IPAddrCount\tFrequency");
     for (ip_addr_count, times) in cnts {
-        println!("{} Ip address appearing {} times.", ip_addr_count, times);
+        println!("{}\t{}", ip_addr_count, times);
     }
 }
 
 fn main() {
     let args = Opt::from_args();
     let ip_addrs = ip_dataset();
-    if args.print_stats {
-        print_set_stats(&ip_addrs);
-    }
-
+    print_set_stats(&ip_addrs);
     let encoders: Vec<Box<dyn IpRepr>> = (0..16)
         .map(|num_bytes_per_intervals| {
             Box::new(IntervalEncoding(8 * num_bytes_per_intervals)) as Box<dyn IpRepr>
