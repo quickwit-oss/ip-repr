@@ -9,14 +9,14 @@ use std::{
 };
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
-struct Opt {
-    #[structopt(short, long)]
-    print_stats: bool,
+// #[derive(Debug, StructOpt)]
+// struct Opt {
+//     #[structopt(short, long)]
+//     print_stats: bool,
 
-    #[structopt(short, long)]
-    compressor: Compressor,
-}
+//     #[structopt(short, long)]
+//     compressor: Compressor,
+// }
 
 #[derive(Debug)]
 enum Compressor {
@@ -25,15 +25,18 @@ enum Compressor {
     HalfDict,
     HalfDictQuantil,
 }
+
+const ALL_COMPRESSORS: [Compressor; 4] = [Compressor::Zstd, Compressor::HalfDict, Compressor::HalfDictQuantil, Compressor::Interval];
+
 impl FromStr for Compressor {
     type Err = String;
-    fn from_str(day: &str) -> Result<Self, Self::Err> {
-        match day {
+    fn from_str(compression_name: &str) -> Result<Self, Self::Err> {
+        match compression_name {
             "zstd" => Ok(Compressor::Zstd),
             "interval" => Ok(Compressor::Interval),
             "halfdict" => Ok(Compressor::HalfDict),
             "halfdict_quantil" => Ok(Compressor::HalfDictQuantil),
-            _ => Err("Could not parse a day".to_string()),
+            _ => Err("Could not parse the compression type".to_string()),
         }
     }
 }
@@ -61,10 +64,9 @@ fn ip_dataset(print_stats: bool) -> Vec<u128> {
         .map(|ip_v6| u128::from_be_bytes(ip_v6.octets()))
         .collect();
 
-    if print_stats {
-        println!("IpAddrsAny\t{}", ip_addrs.len());
-        println!("IpAddrsV4\t{}", ip_addr_v4);
-    }
+    println!("IpAddrsAny\t{}", ip_addrs.len());
+    println!("IpAddrsV4\t{}", ip_addr_v4);
+
     ip_addrs
 }
 
@@ -103,71 +105,78 @@ fn print_set_stats(ip_addrs: &[u128]) {
             b.1.cmp(&a.1)
         }
     });
+
+    println!("\n\n----\nIP Address histogram");
+    println!("IPAddrCount\tFrequency");
     for (ip_addr_count, times) in cnts {
-        println!("{} Ip address appearing {} times.", ip_addr_count, times);
-    }
+        println!("{}\t{}", ip_addr_count, times);
+     }
+
 }
 
 fn main() {
-    let args = Opt::from_args();
-    let ip_addrs = ip_dataset(args.print_stats);
+    // let args = Opt::from_args();
+    let ip_addrs = ip_dataset(true);
 
-    if args.print_stats {
-        print_set_stats(&ip_addrs);
-    }
+    // if args.print_stats {
+    print_set_stats(&ip_addrs);
+    // }
 
-    match args.compressor {
-        Compressor::Interval => {
-            let encoders: Vec<Box<dyn IpRepr>> = (0..16)
-                .map(|num_bytes_per_intervals| {
-                    Box::new(IntervalEncoding(8 * num_bytes_per_intervals)) as Box<dyn IpRepr>
-                })
-                .collect();
+    for compressor in ALL_COMPRESSORS {
+        println!("\n\r=====================\nCOMPRESSOR {compressor:?}");
+        match compressor {
+            Compressor::Interval => {
+                let encoders: Vec<Box<dyn IpRepr>> = (0..16)
+                    .map(|num_bytes_per_intervals| {
+                        Box::new(IntervalEncoding(8 * num_bytes_per_intervals)) as Box<dyn IpRepr>
+                    })
+                    .collect();
 
-            for encoder in encoders {
-                println!("\n\n-----");
-                println!("{:?}", encoder);
-                let encoded = encoder.encode(&ip_addrs);
-                let decoded = encoder.decode(&encoded);
-                assert_eq!(&decoded, &ip_addrs);
-                let num_bytes = encoded.len();
-                println!("num_bytes\t{num_bytes:.2}");
-                let bits_per_el = (8 * num_bytes) as f64 / ip_addrs.len() as f64;
-                println!("bits_per_el\t{:.2}", bits_per_el);
+                for encoder in encoders {
+                    println!("\n\n-----");
+                    println!("{:?}", encoder);
+                    let encoded = encoder.encode(&ip_addrs);
+                    let decoded = encoder.decode(&encoded);
+                    assert_eq!(&decoded, &ip_addrs);
+                    let num_bytes = encoded.len();
+                    println!("num_bytes\t{num_bytes:.2}");
+                    let bits_per_el = (8 * num_bytes) as f64 / ip_addrs.len() as f64;
+                    println!("bits_per_el\t{:.2}", bits_per_el);
+                }
             }
-        }
-        Compressor::HalfDict => {
-            let half_dict = HalfDict::new(1024, 8);
-            half_dict.encode(&ip_addrs);
-        }
-        Compressor::HalfDictQuantil => {
-            let half_dict = HalfDictQ::new(4096 * 2);
-            half_dict.encode(&ip_addrs);
+            Compressor::HalfDict => {
+                let half_dict = HalfDict::new(1024, 8);
+                half_dict.encode(&ip_addrs);
+            }
+            Compressor::HalfDictQuantil => {
+                let half_dict = HalfDictQ::new(4096 * 2);
+                half_dict.encode(&ip_addrs);
 
-            let half_dict = HalfDictQ::new(4096);
-            half_dict.encode(&ip_addrs);
+                let half_dict = HalfDictQ::new(4096);
+                half_dict.encode(&ip_addrs);
 
-            let half_dict = HalfDictQ::new(4096 / 2);
-            half_dict.encode(&ip_addrs);
+                let half_dict = HalfDictQ::new(4096 / 2);
+                half_dict.encode(&ip_addrs);
 
-            let half_dict = HalfDictQ::new(4096 / 4);
-            half_dict.encode(&ip_addrs);
-        }
-        Compressor::Zstd => {
-            let bytes: Vec<u8> = ip_addrs.iter().fold(vec![], |mut acc, el| {
-                acc.extend_from_slice(&el.to_le_bytes());
-                acc
-            });
+                let half_dict = HalfDictQ::new(4096 / 4);
+                half_dict.encode(&ip_addrs);
+            }
+            Compressor::Zstd => {
+                let bytes: Vec<u8> = ip_addrs.iter().fold(vec![], |mut acc, el| {
+                    acc.extend_from_slice(&el.to_le_bytes());
+                    acc
+                });
 
-            let start = Instant::now();
-            let mut out = vec![];
-            zstd::stream::copy_encode(&*bytes, &mut out, 3).unwrap();
-            println!("Compress Time: {}ms", (Instant::now() - start).as_millis());
-            println!("Compressed len: {}", out.len());
-            println!(
-                "Compression: {:.2}%",
-                100.0 * out.len() as f64 / (ip_addrs.len() as f64 * 16.0)
-            );
+                let start = Instant::now();
+                let mut out = vec![];
+                zstd::stream::copy_encode(&*bytes, &mut out, 3).unwrap();
+                println!("Compress Time: {}ms", (Instant::now() - start).as_millis());
+                println!("Compressed len: {}", out.len());
+                println!(
+                    "Compression: {:.2}%",
+                    100.0 * out.len() as f64 / (ip_addrs.len() as f64 * 16.0)
+                );
+            }
         }
     }
 
