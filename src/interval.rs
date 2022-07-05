@@ -8,9 +8,9 @@ pub struct IntervalEncoding(pub usize);
 
 // const COST_IN_BITS: usize = (16 - 2) * 8; // Cost in bits of one
 
-struct Compressor {
+pub struct IntervalCompressor {
     ip_addr_to_compact: BTreeMap<u128, u64>,
-    num_bits: u8,
+    pub num_bits: u8,
 }
 
 const STOP_BIT: u8 = 128u8;
@@ -57,7 +57,7 @@ fn get_deltas(ip_addrs_sorted: &[u128]) -> BinaryHeap<(u128, usize)> {
     deltas
 }
 
-fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
+pub fn train(ip_addrs_sorted: &[u128], add_intervall_cost_in_bits: usize) -> IntervalCompressor {
     let mut deltas = get_deltas(ip_addrs_sorted);
     let mut amplitude = *ip_addrs_sorted.last().unwrap() + 1;
     let mut amplitude_bits: f64 = (amplitude as f64).log2();
@@ -67,7 +67,7 @@ fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
         let next_amplitude_bits = (next_amplitude as f64).log2();
         let gained_bits =
             ((amplitude_bits - next_amplitude_bits) * ip_addrs_sorted.len() as f64) as usize;
-        if cost_in_bits >= gained_bits {
+        if add_intervall_cost_in_bits >= gained_bits {
             break;
         }
         amplitude = next_amplitude;
@@ -94,7 +94,7 @@ fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
         }
     }
     let num_bits = tantivy_bitpacker::compute_num_bits(amplitude as u64);
-    let compressor = Compressor {
+    let compressor = IntervalCompressor {
         ip_addr_to_compact,
         num_bits,
     };
@@ -105,7 +105,7 @@ fn train(ip_addrs_sorted: &[u128], cost_in_bits: usize) -> Compressor {
     compressor
 }
 
-impl Compressor {
+impl IntervalCompressor {
     fn to_compact(&self, ip_addr: u128) -> u64 {
         if let Some((&ip_addr_base, &compact_base)) =
             self.ip_addr_to_compact.range(..=ip_addr).last()
@@ -152,13 +152,13 @@ impl Compressor {
     }
 }
 
-struct Decompressor {
+pub struct IntervallDecompressor {
     compact_to_ip_addrs: BTreeMap<u64, u128>,
     bit_unpacker: BitUnpacker,
 }
 
-impl Decompressor {
-    fn open(mut data: &[u8]) -> (Decompressor, &[u8]) {
+impl IntervallDecompressor {
+    fn open(mut data: &[u8]) -> (IntervallDecompressor, &[u8]) {
         let (num_ip_addrs, new_data) = deserialize_vint(data);
         data = new_data;
         let mut ip_addr = 0u128;
@@ -175,7 +175,7 @@ impl Decompressor {
         }
         let num_bits = data[0];
         data = &data[1..];
-        let decompressor = Decompressor {
+        let decompressor = IntervallDecompressor {
             compact_to_ip_addrs,
             bit_unpacker: BitUnpacker::new(num_bits),
         };
@@ -197,7 +197,7 @@ impl Decompressor {
 }
 
 impl IntervalEncoding {
-    fn train(&self, ip_addrs: &[u128]) -> Compressor {
+    fn train(&self, ip_addrs: &[u128]) -> IntervalCompressor {
         let mut ip_addrs_sorted = ip_addrs.to_vec();
         ip_addrs_sorted.sort();
         train(&ip_addrs_sorted, self.0)
@@ -214,7 +214,7 @@ impl IpRepr for IntervalEncoding {
     }
 
     fn decode(&self, data: &[u8]) -> Vec<u128> {
-        let (decompressor, data) = Decompressor::open(data);
+        let (decompressor, data) = IntervallDecompressor::open(data);
         let (num_vals, data) = deserialize_vint(data);
         let mut ip_addrs = Vec::new();
         for idx in 0..num_vals as usize {
